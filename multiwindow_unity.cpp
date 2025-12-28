@@ -398,6 +398,10 @@ void createApplication() {
     }).detach();
 }
 
+void connectX11Display() {
+    globalXcbConnection = xcb_connect(NULL, NULL);
+}
+
 #ifdef WITH_WINE
 BOOL CALLBACK findMainWindowHandleCallback(HWND hwnd, LPARAM lParam) {
     RECT rect;
@@ -424,17 +428,15 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD reason, LPVOID reserved
 void findMainWindowHandle() {
     int currentPid = getpid();
 
-    xcb_connection_t* connection = xcb_connect(NULL, NULL);
-    globalXcbConnection = connection;
-    xcb_screen_iterator_t screens = xcb_setup_roots_iterator(xcb_get_setup(connection));
+    xcb_screen_iterator_t screens = xcb_setup_roots_iterator(xcb_get_setup(globalXcbConnection));
     xcb_screen_t* screen = screens.data;
     xcb_window_t root = screen->root;
 
-    xcb_atom_t clientListAtom = getAtom(connection, "_NET_CLIENT_LIST");
-    xcb_atom_t pidAtom = getAtom(connection, "_NET_WM_PID");
+    xcb_atom_t clientListAtom = getAtom(globalXcbConnection, "_NET_CLIENT_LIST");
+    xcb_atom_t pidAtom = getAtom(globalXcbConnection, "_NET_WM_PID");
 
     xcb_get_property_cookie_t cookie = xcb_get_property(
-        connection,
+        globalXcbConnection,
         0,
         root,
         clientListAtom,
@@ -443,14 +445,14 @@ void findMainWindowHandle() {
         1024
     );
 
-    xcb_get_property_reply_t* reply = xcb_get_property_reply(connection, cookie, NULL);
+    xcb_get_property_reply_t* reply = xcb_get_property_reply(globalXcbConnection, cookie, NULL);
     int length = xcb_get_property_value_length(reply) / sizeof(xcb_window_t);
 
     xcb_window_t* windows = (xcb_window_t*)xcb_get_property_value(reply);
     for (int i = 0; i < length; i++) {
         xcb_window_t window = windows[i];
         xcb_get_property_cookie_t pidCookie = xcb_get_property(
-            connection,
+            globalXcbConnection,
             0,
             window,
             pidAtom,
@@ -458,7 +460,7 @@ void findMainWindowHandle() {
             0,
             1
         );
-        xcb_get_property_reply_t *pidReply = xcb_get_property_reply(connection, pidCookie, NULL);
+        xcb_get_property_reply_t *pidReply = xcb_get_property_reply(globalXcbConnection, pidCookie, NULL);
         if (pidReply == nullptr) continue;
 
         if (xcb_get_property_value_length(pidReply) != 4) continue;
@@ -1412,6 +1414,7 @@ static void UNITY_INTERFACE_API
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces) {
+    connectX11Display();
     findMainWindowHandle();
     createApplication();
     while (!appReady) usleep(100);
