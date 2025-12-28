@@ -31,7 +31,7 @@ typedef char* LPSTR;
 #define WINAPI
 #include "unity/IUnityGraphics.h"
 #include <GL/glew.h>
-#include <QtCore>
+#include <QtCore/QtCore>
 #include <QtGui/QPainter>
 #include <QtGui/QImage>
 #include <QtGui/QScreen>
@@ -42,8 +42,8 @@ typedef char* LPSTR;
 #include <QtWidgets/QWidget>
 #endif
 
-#include <QDBusMessage>
-#include <QDBusConnection>
+#include <QtDBus/QDBusMessage>
+#include <QtDBus/QDBusConnection>
 #include <bitset>
 #include <unistd.h>
 #include <thread>
@@ -489,9 +489,7 @@ CustomWindow::CustomWindow() {
     setAttribute(Qt::WA_TranslucentBackground);
     setWindowFlag(Qt::WindowStaysOnTopHint); // Does not work on Wayland, have to use JS hack above.
     setWindowFlag(Qt::WindowDoesNotAcceptFocus);
-    #ifndef STEAM_RUNTIME
     setWindowFlag(Qt::WindowTransparentForInput);
-    #endif
 
     this->customId = rand() % 100000;
     this->targetX = 0;
@@ -500,9 +498,7 @@ CustomWindow::CustomWindow() {
     this->targetHeight = 1;
     this->targetOpacity = 0;
 
-    #ifndef STEAM_RUNTIME
     this->setFixedSize(10, 10);
-    #endif
 
     QPixmap* cursor = new QPixmap(1, 1);
     cursor->fill(QColor(0, 0, 0, 0));

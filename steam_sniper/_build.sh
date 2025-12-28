@@ -2,10 +2,16 @@
 
 # Script inside the Docker runtime
 
-g++ -o "steam_sniper/package/Rhythm Doctor_Data/Plugins/multiwindow_unity.so" -fPIC -shared multiwindow_unity.cpp `pkg-config Qt5Widgets Qt5DBus xcb glew --libs --cflags` -O3 -DKWIN_WAYLAND -DSTEAM_RUNTIME
-cp /usr/lib/x86_64-linux-gnu/libQt5WaylandClient.so.5 "steam_sniper/package/"
-cp -r /usr/lib/x86_64-linux-gnu/qt5/plugins/platforms "steam_sniper/package/"
-cp -r /usr/lib/x86_64-linux-gnu/qt5/plugins/wayland-decoration-client "steam_sniper/package/"
-cp -r /usr/lib/x86_64-linux-gnu/qt5/plugins/wayland-graphics-integration-client "steam_sniper/package/"
-cp -r /usr/lib/x86_64-linux-gnu/qt5/plugins/wayland-graphics-integration-server "steam_sniper/package/"
-cp -r /usr/lib/x86_64-linux-gnu/qt5/plugins/wayland-shell-integration "steam_sniper/package/"
+QT_PATH="/usr/local/Qt-6.10.1"
+
+g++ -std=c++17 -o "steam_sniper/package/Rhythm Doctor_Data/Plugins/multiwindow_unity.so" -fPIC -shared multiwindow_unity.cpp `pkg-config xcb glew --libs --cflags` -I"$QT_PATH"/include -L"$QT_PATH/lib" -lQt6Widgets -lQt6Gui -lQt6DBus -lQt6Core -O3 -DKWIN_WAYLAND
+
+MULTIWINDOW_PATH="steam_sniper/package"
+
+mkdir -p "$MULTIWINDOW_PATH"
+
+cp $QT_PATH/lib/lib*.so.6 "$MULTIWINDOW_PATH/"
+rm "$MULTIWINDOW_PATH/libQt6Test.so.6"
+cp -r $QT_PATH/plugins/platforms "$MULTIWINDOW_PATH/"
+cp -r $QT_PATH/plugins/wayland-decoration-client "$MULTIWINDOW_PATH/"
+cp -r $QT_PATH/plugins/wayland-shell-integration "$MULTIWINDOW_PATH/"
