@@ -302,7 +302,7 @@ workspace.windowAdded.connect((win) => {
         for (auto screen : this->screens()) {
             screenGeometries[screen] = screen->availableGeometry(); // Temporary until we get actual sizes later (or use Wayland, there these are not used).
 
-            if (!useWayland) {
+            if (!useWayland && needsX11Cutoff) {
                 ScreenSizeWindow* screenSizeWindow = new ScreenSizeWindow();
                 screenSizeWindow->doTheStuff(screen);
             }
