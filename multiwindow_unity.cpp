@@ -851,10 +851,12 @@ void ScreenSizeWindow::doTheStuff(QScreen* screen) {
     this->actualScreen = screen;
     this->setWindowTitle("IGNORE THIS WINDOW");
     this->setWindowFlag(Qt::WindowStaysOnBottomHint);
+    this->setAttribute(Qt::WA_TranslucentBackground);
     this->setWindowOpacity(0);
     this->setGeometry(screen->geometry());
     this->show();
     QTimer::singleShot(500, [this] {
+        qWarning() << "Could not detect usable screen size";
         delete this;
     });
 }
@@ -864,7 +866,7 @@ void ScreenSizeWindow::resizeEvent(QResizeEvent* event) {
     if (resizeCount != 2) return;
     QTimer::singleShot(10, [this] {
         screenGeometries[this->actualScreen] = this->frameGeometry();
-        qInfo() << "Screen size is" << screenGeometries[this->actualScreen] << "now" << screenGeometries.size() << "screens";
+        qInfo() << "Usable screen size is" << screenGeometries[this->actualScreen] << "now" << screenGeometries.size() << "screens";
         this->close();
     });
 }
