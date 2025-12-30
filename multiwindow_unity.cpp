@@ -894,7 +894,7 @@ Hyprctl::Hyprctl() {
     if (access(socketPath.c_str(), 0) != 0) {
         qCritical() << "Hyprland socket does not exist at" << socketPath;
         qWarning() << "Falling back to X11";
-        waylandType == WaylandType::None;
+        waylandType = WaylandType::None;
         qputenv("QT_QPA_PLATFORM", "xcb");
     }
 }
