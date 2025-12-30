@@ -798,7 +798,25 @@ finalX += primaryScreen->geometry().x();
         }
         this->setWindowTitle(targetTitle + QString::fromStdString(encoded));
     } else if (waylandType == WaylandType::Hyprland) {
-        // TODO: Hyprctl
+        if (!hyprReady) {
+            if (!hyprctl->setProp("initialtitle:" + std::to_string(customId), "no_blur", "on")) {
+                return;
+            }
+            hyprReady = true;
+            hyprctl->setProp("initialtitle:" + std::to_string(customId), "no_focus", "on");
+            hyprctl->setProp("initialtitle:" + std::to_string(customId), "no_anim", "on");
+        }
+        this->setFixedSize(finalWidth, finalHeight);
+        if (hyprX != finalX || hyprY != finalY) {
+            hyprX = finalX;
+            hyprY = finalY;
+            hyprctl->moveWindow("initialtitle:" + std::to_string(customId), finalX, finalY);
+        }
+        if (finalDecorations != _lastDecorations) {
+            this->_lastDecorations = finalDecorations;
+            hyprctl->setProp("initialtitle:" + std::to_string(customId), "decorate", finalDecorations ? "on" : "off");
+        }
+        this->setWindowTitle(targetTitle);
     } else {
         this->setFixedSize(finalWidth, finalHeight);
         this->setGeometry(finalX, finalY, finalWidth, finalHeight);
@@ -899,13 +917,13 @@ Hyprctl::Hyprctl() {
     }
 }
 
-void Hyprctl::sendMessage(std::string message) {
+bool Hyprctl::sendMessage(std::string message) {
     #ifndef WITH_WINE // TODO: Find out a way to have unix sockets work with winelib (if there is a way)
     auto sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock == -1) {
         qCritical() << "sock -1";
         close(sock);
-        return;
+        return false;
     }
     sockaddr_un addr = {0};
     addr.sun_family = AF_UNIX;
@@ -914,14 +932,14 @@ void Hyprctl::sendMessage(std::string message) {
     if (res == -1) {
         qCritical() << "connect -1";
         close(sock);
-        return;
+        return false;
     }
     const char* data = message.c_str();
     res = write(sock, data, strlen(data));
     if (res == -1) {
         qCritical() << "write -1";
         close(sock);
-        return;
+        return false;
     }
     constexpr size_t bufferSize = 4096;
     char buffer[bufferSize] = {0};
@@ -929,17 +947,27 @@ void Hyprctl::sendMessage(std::string message) {
     if (written == -1) {
         qCritical() << "read -1";
         close(sock);
-        return;
+        return false;
     }
     std::string reply = std::string(buffer, written);
     if (reply != "ok") {
         qCritical() << reply;
         close(sock);
-        return;
+        return false;
     }
     close(sock);
     #endif
+    return true;
 }
+
+bool Hyprctl::setProp(std::string window, std::string effect, std::string argument) {
+    return sendMessage("dispatch setprop " + window + " " + effect + " " + argument);
+}
+
+bool Hyprctl::moveWindow(std::string window, int x, int y) {
+    return sendMessage("dispatch movewindowpixel exact " + std::to_string(x) + " " + std::to_string(y) + "," + window);
+}
+
 // ---- End of Hyprctl ----
 
 
@@ -950,11 +978,11 @@ void setMainWindowGeometry(int x, int y, int w, int h) {
     if (w != MAIN_WINDOW_GEOMETRY_SKIP) main_window_width = w;
     if (h != MAIN_WINDOW_GEOMETRY_SKIP) main_window_height = h;
 
-    if (main_window_handle == 0) return;
-
     bool invisible = x < -1500 || y < -1500;
 
 #ifdef WITH_WINE
+    if (main_window_handle == 0) return;
+
     if (invisible) {
         SetWindowLongPtr(main_window_handle, GWL_EXSTYLE, GetWindowLongPtr(main_window_handle, GWL_EXSTYLE) | WS_EX_LAYERED);
         SetLayeredWindowAttributes(main_window_handle, 0, 0, LWA_ALPHA);
@@ -964,22 +992,34 @@ void setMainWindowGeometry(int x, int y, int w, int h) {
     SetWindowLongPtr(main_window_handle, GWL_EXSTYLE, GetWindowLongPtr(main_window_handle, GWL_EXSTYLE) & ~WS_EX_LAYERED);
     SetWindowPos(main_window_handle, NULL, main_window_x, main_window_y, main_window_width, main_window_height, 0);
 #else
-    uint32_t opacity = invisible ? 0x00000000 : 0xFFFFFFFF;
+    if (waylandType == WaylandType::Hyprland) {
+        if (invisible) {
+            hyprctl->setProp("initialtitle:Rhythm.Doctor", "opacity", "0");
+            hyprctl->setProp("initialtitle:Rhythm.Doctor", "no_blur", "1");
+        } else {
+            hyprctl->setProp("initialtitle:Rhythm.Doctor", "opacity", "1");
+            hyprctl->moveWindow("initialtitle:Rhythm.Doctor", x, y);
+        }
+    } else {
+        if (main_window_handle == 0) return;
 
-    xcb_atom_t atom = getAtom(globalXcbConnection, "_NET_WM_WINDOW_OPACITY");
+        uint32_t opacity = invisible ? 0x00000000 : 0xFFFFFFFF;
 
-    xcb_change_property(
-        globalXcbConnection,
-        XCB_PROP_MODE_REPLACE,
-        main_window_handle,
-        atom,
-        XCB_ATOM_CARDINAL,
-        32,
-        1,
-        &opacity
-    );
+        xcb_atom_t atom = getAtom(globalXcbConnection, "_NET_WM_WINDOW_OPACITY");
 
-    xcb_flush(globalXcbConnection);
+        xcb_change_property(
+            globalXcbConnection,
+            XCB_PROP_MODE_REPLACE,
+            main_window_handle,
+            atom,
+            XCB_ATOM_CARDINAL,
+            32,
+            1,
+            &opacity
+            );
+
+        xcb_flush(globalXcbConnection);
+    }
 #endif
 }
 
@@ -1181,6 +1221,9 @@ extern "C" WINAPI FFIResult new_window(
         customWindow->setTargetMove(x, y);
         customWindow->setTargetSize(w, h);
         customWindow->updateThings();
+        if (waylandType == WaylandType::Hyprland) {
+            customWindow->setWindowTitle(QString::number(customWindow->customId));
+        }
         allCustomWindows.push_back(customWindow);
         customWindow->show();
     }, Qt::BlockingQueuedConnection);
@@ -1409,12 +1452,41 @@ void arrangeWindowsKWinWayland(HWND* windows, int count) {
     }
 }
 
+void arrangeWindowsHyprland(HWND* windows, int count) {
+    std::vector<CustomWindow*> windowList;
+    for (int i = 0; i < count; i++) {
+        if (windows[i] == MAIN_WINDOW) continue;
+        windowList.insert(windowList.begin(), (CustomWindow*)windows[i]);
+    }
+
+    bool hasChanged = false;
+    if (waylandWindowOrder.size() != windowList.size()) {
+        hasChanged = true;
+    }
+    waylandWindowOrder.resize(windowList.size());
+    for (size_t i = 0; i < windowList.size(); i++) {
+        WId target = windowList[i]->customId;
+        if (target != waylandWindowOrder[i]) {
+            hasChanged = true;
+        }
+        waylandWindowOrder[i] = target;
+    }
+
+    if (hasChanged) {
+        for (auto win : windowList) {
+            hyprctl->sendMessage("dispatch alterzorder top,initialtitle:" + std::to_string(win->customId));
+        }
+    }
+}
+
 extern "C" WINAPI void arrange_windows(HWND* windows, int count) {
     if (waylandType == WaylandType::KDE) {
         arrangeWindowsKWinWayland(windows, count);
     } else if (waylandType == WaylandType::None) {
         arrangeWindowsX11(windows, count);
-    } // TODO: Hyprctl. "hyprctl dispatch alterzorder top,<window>"
+    } else if (waylandType == WaylandType::Hyprland) {
+        arrangeWindowsHyprland(windows, count);
+    }
 }
 
 static void UNITY_INTERFACE_API render(int eventID) {
