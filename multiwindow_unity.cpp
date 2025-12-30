@@ -40,6 +40,8 @@ typedef char* LPSTR;
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QWidget>
+#include <sys/socket.h>
+#include <sys/un.h>
 #endif
 
 #include <QtDBus/QDBusMessage>
@@ -54,6 +56,12 @@ typedef char* LPSTR;
 #define SAFE_FREE(a) if (a) { free(a); a = NULL; }
 #define SAFE_DELETE(a) if (a) { delete a; a = NULL; }
 
+enum WaylandType {
+    None,
+    KDE,
+    Hyprland
+};
+
 QString kwinFile = "/tmp/multiwindow_unity_kwin.js";
 void* MAIN_WINDOW = (void*)0x12345;
 #ifdef WITH_WINE
@@ -67,7 +75,7 @@ int main_window_width = 800;
 int main_window_height = 600;
 bool createdApplication = false;
 bool appReady = false;
-bool useWayland = false;
+WaylandType waylandType = WaylandType::None;
 bool needsX11Cutoff = true;
 #ifdef WITH_WINE
 bool usingWine = true;
@@ -84,6 +92,7 @@ QMutex customWindowMutex;
 std::vector<WId> waylandWindowOrder;
 
 xcb_connection_t* globalXcbConnection;
+Hyprctl* hyprctl = nullptr;
 
 std::string boolToStr(bool value) {
     return value ? "true" : "false";
@@ -293,7 +302,7 @@ workspace.windowAdded.connect((win) => {
     }
 
     void startRunning() {
-        if (useWayland) {
+        if (waylandType == WaylandType::KDE) {
             addKWinScript();
         }
 
@@ -302,7 +311,7 @@ workspace.windowAdded.connect((win) => {
         for (auto screen : this->screens()) {
             screenGeometries[screen] = screen->availableGeometry(); // Temporary until we get actual sizes later (or use Wayland, there these are not used).
 
-            if (!useWayland && needsX11Cutoff) {
+            if (waylandType == WaylandType::None) {
                 ScreenSizeWindow* screenSizeWindow = new ScreenSizeWindow();
                 screenSizeWindow->doTheStuff(screen);
             }
@@ -364,11 +373,7 @@ void hookIntoDLL() {
 }
 #endif
 
-void checkForKWinWayland() {
-    if (qgetenv("XDG_SESSION_DESKTOP").toLower() != "kde") {
-        return;
-    }
-
+void checkForWayland() {
     if (qgetenv("XDG_SESSION_TYPE").toLower() != "wayland") {
         return;
     }
@@ -378,7 +383,17 @@ void checkForKWinWayland() {
         return;
     }
 
-    useWayland = true;
+    auto sessionDesktop = qgetenv("XDG_SESSION_DESKTOP").toLower();
+
+    if (sessionDesktop == "kde") {
+        waylandType = WaylandType::KDE;
+#ifndef WITH_WINE
+    } else if (sessionDesktop == "hyprland") {
+        waylandType = WaylandType::Hyprland;
+#endif
+    } else {
+        qWarning() << "You are using an unsupported Wayland DE/WM! Bug reports may be ignored.";
+    }
 }
 
 bool doesDesktopNeedCutoff() {
@@ -393,18 +408,17 @@ void createApplication() {
     if (createdApplication) return;
     createdApplication = true;
     needsX11Cutoff = doesDesktopNeedCutoff();
-#ifdef KWIN_WAYLAND
-    qInfo() << "Compiled with Wayland capabilities. Checking if it is supported.";
-    checkForKWinWayland();
-#endif
+    checkForWayland();
 #ifdef WITH_WINE
     hookIntoDLL();
 #endif
 
-    qInfo() << "Using KWin Wayland:" << useWayland;
-    
-    if (!useWayland) {
+    qInfo() << "Wayland type:" << waylandType;
+
+    if (waylandType == WaylandType::None) {
         qputenv("QT_QPA_PLATFORM", "xcb");
+    } else if (waylandType == WaylandType::Hyprland) {
+        hyprctl = new Hyprctl();
     }
 
     std::thread([] {
@@ -681,7 +695,7 @@ void CustomWindow::updateThings() {
     float finalOpacity = this->targetOpacity;
     bool finalDecorations = targetDecorations;
 
-    if (!useWayland) {
+    if (waylandType == WaylandType::None) {
         for (auto g : screenGeometries) {
             unitedScreenGeometry = unitedScreenGeometry.united(g);
             int h = g.height() + primaryScreenGeometry.y();
@@ -702,7 +716,7 @@ void CustomWindow::updateThings() {
 finalX += primaryScreen->geometry().x();
 #endif
 
-    if (!useWayland && needsX11Cutoff) {
+    if (waylandType == WaylandType::None && needsX11Cutoff) {
         if (finalX < 0 - finalWidth) {
             finalOpacity = 0;
         }
@@ -760,14 +774,14 @@ finalX += primaryScreen->geometry().x();
 
     isVisible = finalOpacity > 0;
 
-    if (useWayland && !isVisible) {
+    if ((waylandType == WaylandType::KDE || waylandType == WaylandType::Hyprland) && !isVisible) {
         finalY = -5000; // Just put the window far away in Wayland, do not bother with actual opacity.
     }
 
     // testLabel->setText(QString("Position: %1, %2\nSize: %3 x %4").arg(QString::number(targetX), QString::number(targetY), QString::number(targetWidth), QString::number(targetHeight)));
     // testLabel->setGeometry(0, 0, finalWidth, finalHeight);
 
-    if (useWayland) { // Wayland doesn't support actual window movement. We have to "smuggle" data in the title to the JS plugin.
+    if (waylandType == WaylandType::KDE) { // Wayland doesn't support actual window movement. We have to "smuggle" data in the title to the JS plugin.
         std::string encoded = "";
         std::vector<int> smuggledInfo = {finalX, finalY, finalWidth, finalHeight, finalDecorations ? 1 : 0, this->customId, (int)waylandWindowOrder.size()};
         for (auto winId : waylandWindowOrder) {
@@ -783,6 +797,8 @@ finalX += primaryScreen->geometry().x();
             i++;
         }
         this->setWindowTitle(targetTitle + QString::fromStdString(encoded));
+    } else if (waylandType == WaylandType::Hyprland) {
+        // TODO: Hyprctl
     } else {
         this->setFixedSize(finalWidth, finalHeight);
         this->setGeometry(finalX, finalY, finalWidth, finalHeight);
@@ -870,7 +886,61 @@ void ScreenSizeWindow::resizeEvent(QResizeEvent* event) {
         this->close();
     });
 }
-// ---- End of ScreenSizeWindow ---- 
+// ---- End of ScreenSizeWindow ----
+
+// ---- Start of Hyprctl ----
+Hyprctl::Hyprctl() {
+    socketPath = "/run/user/" + std::to_string(getuid()) + "/hypr/" + getenv("HYPRLAND_INSTANCE_SIGNATURE") + "/.socket.sock";
+    if (access(socketPath.c_str(), 0) != 0) {
+        qCritical() << "Hyprland socket does not exist at" << socketPath;
+        qWarning() << "Falling back to X11";
+        waylandType == WaylandType::None;
+        qputenv("QT_QPA_PLATFORM", "xcb");
+    }
+}
+
+void Hyprctl::sendMessage(std::string message) {
+    #ifndef WITH_WINE // TODO: Find out a way to have unix sockets work with winelib (if there is a way)
+    auto sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock == -1) {
+        qCritical() << "sock -1";
+        close(sock);
+        return;
+    }
+    sockaddr_un addr = {0};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socketPath.c_str(), sizeof(addr.sun_path) - 1);
+    int res = connect(sock, (sockaddr*)&addr, sizeof(addr));
+    if (res == -1) {
+        qCritical() << "connect -1";
+        close(sock);
+        return;
+    }
+    const char* data = message.c_str();
+    res = write(sock, data, strlen(data));
+    if (res == -1) {
+        qCritical() << "write -1";
+        close(sock);
+        return;
+    }
+    constexpr size_t bufferSize = 4096;
+    char buffer[bufferSize] = {0};
+    int written = read(sock, buffer, bufferSize);
+    if (written == -1) {
+        qCritical() << "read -1";
+        close(sock);
+        return;
+    }
+    std::string reply = std::string(buffer, written);
+    if (reply != "ok") {
+        qCritical() << reply;
+        close(sock);
+        return;
+    }
+    close(sock);
+    #endif
+}
+// ---- End of Hyprctl ----
 
 
 int MAIN_WINDOW_GEOMETRY_SKIP = 0xFEAB12;
@@ -1263,7 +1333,7 @@ extern "C" WINAPI void destroy_window(HWND window) {
     CustomWindow* customWindow = (CustomWindow*)window;
     customWindow->isClosing = true;
     QMetaObject::invokeMethod(app, [customWindow]() {
-        if (!useWayland) {
+        if (waylandType == WaylandType::None) {
             customWindow->setWindowOpacity(0);
         }
         customWindow->close();
@@ -1326,7 +1396,7 @@ void arrangeWindowsX11(HWND* windows, int count) {
     xcb_flush(globalXcbConnection);
 }
 
-void arrangeWindowsWayland(HWND* windows, int count) {
+void arrangeWindowsKWinWayland(HWND* windows, int count) {
     std::vector<CustomWindow*> windowList;
     for (int i = 0; i < count; i++) {
         if (windows[i] == MAIN_WINDOW) continue;
@@ -1340,11 +1410,11 @@ void arrangeWindowsWayland(HWND* windows, int count) {
 }
 
 extern "C" WINAPI void arrange_windows(HWND* windows, int count) {
-    if (useWayland) {
-        arrangeWindowsWayland(windows, count);
-    } else {
+    if (waylandType == WaylandType::KDE) {
+        arrangeWindowsKWinWayland(windows, count);
+    } else if (waylandType == WaylandType::None) {
         arrangeWindowsX11(windows, count);
-    }
+    } // TODO: Hyprctl. "hyprctl dispatch alterzorder top,<window>"
 }
 
 static void UNITY_INTERFACE_API render(int eventID) {

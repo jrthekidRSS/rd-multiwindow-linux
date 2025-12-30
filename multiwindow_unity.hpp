@@ -68,3 +68,11 @@ public:
     int resizeCount = 0;
     void resizeEvent(QResizeEvent* event) override;
 };
+
+class Hyprctl {
+public:
+    std::string socketPath;
+
+    Hyprctl();
+    void sendMessage(std::string message);
+};
