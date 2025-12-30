@@ -14,6 +14,9 @@ public:
     // QLabel* testLabel;
     bool isVisible = true;
     bool isClosing = false;
+    bool hyprReady = false;
+    int hyprX = -1;
+    int hyprY = -1;
 
     bool _lastDecorations = true;
 
@@ -55,7 +58,6 @@ public:
     void updateThings();
     void paintEvent(QPaintEvent* paintEvent) override;
     void setIcon(QImage* image);
-    void closeEvent(QCloseEvent* closeEvent) override;
     ~CustomWindow();
 };
 
@@ -74,5 +76,7 @@ public:
     std::string socketPath;
 
     Hyprctl();
-    void sendMessage(std::string message);
+    bool sendMessage(std::string message);
+    bool setProp(std::string window, std::string effect, std::string argument);
+    bool moveWindow(std::string window, int x, int y);
 };
