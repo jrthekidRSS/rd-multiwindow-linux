@@ -58,6 +58,7 @@ public:
     void updateThings();
     void paintEvent(QPaintEvent* paintEvent) override;
     void setIcon(QImage* image);
+    void closeEvent(QCloseEvent* closeEvent) override;
     ~CustomWindow();
 };
 
