@@ -28,7 +28,7 @@ public class PlatformHelperLinux : PlatformHelper
     {
         var match = list.FirstOrDefault((x) => x.monitor.bounds.ContainsPoint(playerCenter));
 
-        return match == default ? 0 : match.index; 
+        return match == default ? 0 : match.index;
     }
 
     public override List<Monitor> GetMonitors()
