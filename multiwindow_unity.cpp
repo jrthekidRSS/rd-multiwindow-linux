@@ -396,14 +396,14 @@ void checkForWayland() {
     }
 
     if (useX11) {
-        if (sessionDesktop != "kde") {
+        if (sessionDesktop != "kde" && sessionDesktop != "plasma") {
             qWarning() << "You are using an unsupported DE/WM on X11! Bug reports may be ignored.";
             unsupportedDE = true;
         }
         return;
     }
 
-    if (sessionDesktop == "kde") {
+    if (sessionDesktop == "kde" || sessionDesktop == "plasma") {
         waylandType = WaylandType::KDE;
 #ifndef WITH_WINE
     } else if (sessionDesktop == "hyprland") {
