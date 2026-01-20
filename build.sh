@@ -3,7 +3,7 @@
 set -eu
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 \"/path/to/steamapps/common/Rhythm Doctor\" [--wayland]"
+    echo "Usage: $0 \"/path/to/steamapps/common/Rhythm Doctor\""
     exit 1
 fi
 
