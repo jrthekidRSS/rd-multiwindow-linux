@@ -97,10 +97,11 @@ bool hyprlandError = false;
 // Maximizing invisible windows (ScreenSizeWindow) is a more reliable
 // method of getting the actual screen size without the taskbar.
 QMap<QScreen*, QRect> screenGeometries;
+int framesSinceReorder = 0;
 
 std::vector<CustomWindow*> allCustomWindows;
 QMutex customWindowMutex;
-std::vector<WId> waylandWindowOrder;
+std::vector<WId> storedWindowOrder;
 
 xcb_connection_t* globalXcbConnection;
 Hyprctl* hyprctl = nullptr;
@@ -792,8 +793,8 @@ void CustomWindow::updateThings() {
                                          finalHeight,
                                          finalDecorations ? 1 : 0,
                                          this->customId,
-                                         (int)waylandWindowOrder.size()};
-        for (auto winId : waylandWindowOrder) {
+                                         (int)storedWindowOrder.size()};
+        for (auto winId : storedWindowOrder) {
             smuggledInfo.push_back(winId);
         }
         int i = 0;
@@ -1452,10 +1453,30 @@ void arrangeWindowsX11(HWND* windows, int count) {
         windowList.push_back((CustomWindow*)windows[i]);
     }
 
-    for (size_t i = 0; i < windowList.size() - 1; i++) {
-        WId configOptions[] = {windowList[i + 1]->window()->winId(), XCB_STACK_MODE_BELOW};
-        xcb_configure_window(globalXcbConnection, windowList[i]->window()->winId(),
-                             XCB_CONFIG_WINDOW_SIBLING | XCB_CONFIG_WINDOW_STACK_MODE, configOptions);
+    bool hasChanged = false;
+    if (storedWindowOrder.size() != windowList.size()) {
+        hasChanged = true;
+        storedWindowOrder.resize(windowList.size());
+    }
+
+    for (size_t i = 0; i < windowList.size(); i++) {
+        WId target = windowList[i]->window()->winId();
+        if (target != storedWindowOrder[i]) {
+            hasChanged = true;
+        }
+        storedWindowOrder[i] = target;
+    }
+
+    if (!hasChanged && framesSinceReorder < 30) {
+        return;
+    }
+
+    framesSinceReorder = 0;
+
+    for (size_t i = 0; i < windowList.size(); i++) {
+        WId configOptions[] = {XCB_STACK_MODE_BELOW};
+        xcb_configure_window(globalXcbConnection, windowList[i]->window()->winId(), XCB_CONFIG_WINDOW_STACK_MODE,
+                             configOptions);
     }
 
     xcb_flush(globalXcbConnection);
@@ -1470,9 +1491,9 @@ void arrangeWindowsKWinWayland(HWND* windows, int count) {
         windowList.push_back((CustomWindow*)windows[i]);
     }
 
-    waylandWindowOrder.resize(windowList.size());
+    storedWindowOrder.resize(windowList.size());
     for (size_t i = 0; i < windowList.size(); i++) {
-        waylandWindowOrder[i] = windowList[windowList.size() - i - 1]->customId;
+        storedWindowOrder[i] = windowList[windowList.size() - i - 1]->customId;
     }
 }
 
@@ -1486,16 +1507,16 @@ void arrangeWindowsHyprland(HWND* windows, int count) {
     }
 
     bool hasChanged = false;
-    if (waylandWindowOrder.size() != windowList.size()) {
+    if (storedWindowOrder.size() != windowList.size()) {
         hasChanged = true;
     }
-    waylandWindowOrder.resize(windowList.size());
+    storedWindowOrder.resize(windowList.size());
     for (size_t i = 0; i < windowList.size(); i++) {
         WId target = windowList[i]->customId;
-        if (target != waylandWindowOrder[i]) {
+        if (target != storedWindowOrder[i]) {
             hasChanged = true;
         }
-        waylandWindowOrder[i] = target;
+        storedWindowOrder[i] = target;
     }
 
     if (hasChanged) {
@@ -1524,6 +1545,7 @@ static void UNITY_INTERFACE_API render(int eventID) {
         }
     }
     customWindowMutex.unlock();
+    framesSinceReorder += 1;
 }
 
 extern "C" WINAPI void* get_render_event_func() {
