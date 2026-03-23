@@ -25,11 +25,15 @@ The native Linux version works with BepInEx 5. BepInEx is a mod loader for games
 
 1. You'll need BepInEx 5 installed. If you do not have it, follow the [install guide](https://docs.bepinex.dev/articles/user_guide/installation/index.html?tabs=tabid-nix), then also follow the [Steam guide](https://docs.bepinex.dev/articles/advanced/steam_interop.html).
 
-2. [Download the latest release ZIP](https://github.com/chocolateimage/rd-multiwindow-linux/releases/latest/download/linux-steam-runtime-multiwindow.zip) and extract it to the root of the game. `libQt6#######.so.6` files should be in the same folder as `UnityPlayer.so` and `run_bepinex.sh`.
+1. [Download the latest release ZIP](https://github.com/chocolateimage/rd-multiwindow-linux/releases/latest/download/linux-steam-runtime-multiwindow.zip) and extract it to the root of the game. `libQt6#######.so.6` files should be in the same folder as `UnityPlayer.so` and `run_bepinex.sh`.
 
-3. In the Steam compatibility settings, do not force the runtime.
+1. In the Steam compatibility settings, do not force the runtime.
 
-4. Open the game, go to the settings and select the window dance option in the accessibility tab. Have fun!
+1. Set Steam launch options:
+    - **KDE Plasma (and rest):** `./run_bepinex.sh %command%`
+    - **Hyprland:** `PRESSURE_VESSEL_FILESYSTEMS_RW=/run/user/1000/hypr ./run_bepinex.sh %command%`
+
+1. Open the game, go to the settings and select the window dance option in the accessibility tab. Have fun!
 
 If you found this plugin useful or cool, consider starring the GitHub repo!
 
