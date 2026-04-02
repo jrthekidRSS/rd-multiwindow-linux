@@ -1,11 +1,19 @@
 ---
-name: Bug report
-about: Send a bug report
+name: Bug report / something is not working
+about: Send a bug report. Also use this if something is not working.
 title: ''
 labels: bug
-assignees: ''
+assignees: chocolateimage
 
 ---
+
+<!--
+==========================
+Please fill out the issue fully! I cannot help you else.
+
+If you do not, then the issue may be closed.
+==========================
+-->
 
 **Before you continue...**
 - [ ] I have updated the plugin to the latest version
