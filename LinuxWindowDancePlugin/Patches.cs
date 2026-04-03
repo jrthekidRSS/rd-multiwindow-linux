@@ -4,6 +4,7 @@ using HarmonyLib;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using MultiWindow;
 
 namespace LinuxWindowDancePlugin;
 
@@ -140,5 +141,31 @@ public class Patches
     {
         WindowChoreographer.playerWindow.Show(true);
         return true;
+    }
+
+    [HarmonyPatch(typeof(RealWindowChoreographer), "UpdateWindowZOrders")]
+    [HarmonyPrefix]
+    public static bool CheckForWindowDanceChanges(RealWindowChoreographer __instance)
+    {
+        List<BaseWindow> list = (from i in __instance.zOrder
+                                 where i < __instance.dancers.Length
+                                 select __instance.dancers[i] into x
+                                 where x.visible
+                                 select ((RealWindow)x.window).Window).ToList();
+        List<BaseWindow> restWindows = (from i in __instance.dancers
+                                        where i.visible
+                                        select ((RealWindow)i.window).Window).Except(list).ToList();
+        if (!__instance.mainWindowIsDancer)
+        {
+            list.Insert(0, WindowChoreographer.playerWindow.Window);
+        }
+
+        list.AddRange(restWindows);
+
+        if (list.Count > 1)
+        {
+            BaseWindow.Arrange(list.ToArray());
+        }
+        return false;
     }
 }
