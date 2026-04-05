@@ -31,7 +31,7 @@ The native Linux version works with BepInEx 5. BepInEx is a mod loader for games
 
 1. Set Steam launch options:
     - **KDE Plasma (and rest):** `./run_bepinex.sh %command%`
-    - **Hyprland:** `PRESSURE_VESSEL_FILESYSTEMS_RW=/run/user/1000/hypr ./run_bepinex.sh %command%`
+    - **Hyprland:** `PRESSURE_VESSEL_FILESYSTEMS_RW="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE" ./run_bepinex.sh %command%`
 
 1. Open the game, go to the settings and select the window dance option in the accessibility tab. Have fun!
 
