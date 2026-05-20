@@ -815,11 +815,11 @@ void CustomWindow::updateThings() {
             hyprReady = true;
             hyprctl->setProp("initialtitle:" + std::to_string(customId), "no_focus", "on");
             hyprctl->setProp("initialtitle:" + std::to_string(customId), "no_anim", "on");
-            hyprctl->sendMessage("dispatch setfloating initialtitle:" + std::to_string(customId));
+            hyprctl->sendMessage("dispatch hl.dsp.window.float({ window = 'initialtitle:" + std::to_string(customId) + "' })");
         }
         hyprctl->moveWindow("initialtitle:" + std::to_string(customId), finalX, finalY);
-        hyprctl->sendMessage("dispatch resizewindowpixel exact " + std::to_string(finalWidth) + " " +
-                             std::to_string(finalHeight) + ",initialtitle:" + std::to_string(customId));
+        hyprctl->sendMessage("dispatch hl.dsp.window.resize({ x = " + std::to_string(finalWidth) + ", y = " +
+                             std::to_string(finalHeight) + ", window = 'initialtitle:" + std::to_string(customId) + "'})");
         if (finalDecorations != _lastDecorations) {
             this->_lastDecorations = finalDecorations;
             hyprctl->setProp("initialtitle:" + std::to_string(customId), "decorate", finalDecorations ? "on" : "off");
@@ -982,11 +982,11 @@ bool Hyprctl::sendMessageSync(std::string message) {
 }
 
 bool Hyprctl::setProp(std::string window, std::string effect, std::string argument) {
-    return sendMessageSync("dispatch setprop " + window + " " + effect + " " + argument);
+    return sendMessageSync("dispatch hl.dsp.window.set_prop({ prop = '" + effect + "', value = '" + argument + "', window = '" + window + "'})");
 }
 
 void Hyprctl::moveWindow(std::string window, int x, int y) {
-    return sendMessage("dispatch movewindowpixel exact " + std::to_string(x) + " " + std::to_string(y) + "," + window);
+    return sendMessage("dispatch hl.dsp.window.move({ x = " + std::to_string(x) + ", y = " + std::to_string(y) + ", window = '" + window + "'})");
 }
 
 // ---- End of Hyprctl ----
@@ -1521,7 +1521,7 @@ void arrangeWindowsHyprland(HWND* windows, int count) {
 
     if (hasChanged) {
         for (auto win : windowList) {
-            hyprctl->sendMessageSync("dispatch alterzorder top,initialtitle:" + std::to_string(win->customId));
+            hyprctl->sendMessageSync("dispatch hl.dsp.window.alter_zorder({ mode = 'top', window = 'initialtitle:" + std::to_string(win->customId) + "'");
         }
     }
 }
